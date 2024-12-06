@@ -1,0 +1,11 @@
+{
+    "dependencies": {
+        "communicator": 4,
+        "network": 1
+    },
+    "id_name": "communicator_server",
+    "version": 6,
+    "author": "tom",
+    "name": "Communicator server",
+    "description": ""
+}
