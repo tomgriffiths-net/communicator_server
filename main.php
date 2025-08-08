@@ -54,7 +54,7 @@ class communicator_server{
                     $response = "EXIT COMMUNICATOR SERVER";
                 }
                 elseif($data["type"] === "command"){
-                    cli_run($data['payload']);
+                    cli::run($data['payload']);
                     $response = "Command run";
                 }
                 elseif($data["type"] === "function_string"){
@@ -74,8 +74,8 @@ class communicator_server{
                 echo $connid . ": Closing connection (" . $timeTaken . "s)\n";
                 communicator::close($clientSocket);
 
-                if($timeTaken > 2){
-                    echo "Warning: " . $connid . ": Took longer than 2 seconds to execute: " . $data['payload'] . "\n";
+                if($timeTaken > 0.5){
+                    echo "Warning: " . $connid . ": Took longer than 0.5 seconds to execute: " . $data['payload'] . "\n";
                 }
             }
             
