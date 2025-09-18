@@ -54,8 +54,7 @@ class communicator_server{
                     $response = true;
                 }
                 elseif($data["type"] === "command"){
-                    cli::run($data['payload']);
-                    $response = "Command run";
+                    $response = cli::run($data['payload']);
                 }
                 elseif($data["type"] === "function_string"){
                     try{
