@@ -61,7 +61,7 @@ class communicator_server{
                         $response = eval('return ' . $data['payload'] . ';');
                     }
                     catch(Throwable $throwable){
-                        mklog(2, "Something went wrong while trying to process: " . substr($data['payload'],0,strpos($data['payload'],"(")) . " (" . substr($throwable,0,strpos($throwable,"\n")) . ")");
+                        mklog(2, "Something went wrong while trying to process: " . substr($data['payload'],0,strpos($data['payload'],"(")) . "(...); (" . substr($throwable,0,strpos($throwable,"\n")) . ")");
                     }
                 }
 
@@ -76,7 +76,7 @@ class communicator_server{
                 @communicator::close($clientSocket);
 
                 if($timeTaken > 1){
-                    mklog(2, 'The payload ' . ($data["type"] === "function_string" ? substr($data['payload'],0,strpos($data['payload'],"(")) : $data['payload']) . ' took longer than 1 second to execute');
+                    mklog(2, 'The payload ' . ($data["type"] === "function_string" ? (substr($data['payload'],0,strpos($data['payload'],"(")) . '(...);') : $data['payload']) . ' took longer than 1 second to execute');
                 }
             }
             
