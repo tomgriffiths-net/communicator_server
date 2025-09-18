@@ -4,30 +4,28 @@ class communicator_server{
         extensions::ensure('sockets');
 
         if(network::ping('127.0.0.1',8080,1)){
-            mklog('warning','Unable to listen on 127.0.0.1:' . $port . ' as it is already in use',false);
+            mklog(2,'Unable to listen on 127.0.0.1:' . $port . ' as it is already in use');
             return;
         }
 
-        $socket = communicator::createServer('127.0.0.1',$port,false,$socketError,$socketErrorString);
+        $socket = communicator::createServer('127.0.0.1', $port, 10, $socketError, $socketErrorString);
         if(!$socket){
-            mklog('warning','Unable to listen on 127.0.0.1:' . $port,false);
+            mklog(2,'Unable to listen on 127.0.0.1:' . $port);
             return;
         }
         echo "Listening on 127.0.0.1:$port\n";
         exec('title Communicator Server ' . $port);
 
-        stream_set_timeout($socket,5);
-
         while(true){
             $break = false;
-            $clientSocket = communicator::acceptConnection($socket,5);
+            $clientSocket = communicator::acceptConnection($socket, 10);
             if($clientSocket){
                 $startTime = time();
                 $tempconid = date("Y-m-d H:i:s");
                 echo "$tempconid: Received connection\n";
 
                 $data = communicator::receive($clientSocket);
-                $data = json_decode(base64_decode($data),true);
+                $data = json_decode(base64_decode($data), true);
                 $response = false;
 
                 $required = array("type","payload","name","password");
