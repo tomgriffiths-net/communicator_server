@@ -1,19 +1,19 @@
 <?php
 class communicator_server{
-    public static function socketServer($port = 8080){
+    public static function socketServer(int $port=8080, string $ip="127.0.0.1"){
         extensions::ensure('sockets');
 
-        if(network::ping('127.0.0.1',8080,1)){
-            mklog(2,'Unable to listen on 127.0.0.1:' . $port . ' as it is already in use');
+        if(network::ping($ip, $port, 1)){
+            mklog(2,'Unable to listen on ' . $ip . ':' . $port . ' as it is already in use');
             return;
         }
 
-        $socket = communicator::createServer('127.0.0.1', $port, 10, $socketError, $socketErrorString);
+        $socket = communicator::createServer($ip, $port, 10, $socketError, $socketErrorString);
         if(!$socket){
-            mklog(2,'Unable to listen on 127.0.0.1:' . $port);
+            mklog(2,'Unable to listen on ' . $ip . ':' . $port);
             return;
         }
-        echo "Listening on 127.0.0.1:$port\n";
+        echo "Listening on $ip:$port\n";
         exec('title Communicator Server ' . $port);
 
         while(true){
