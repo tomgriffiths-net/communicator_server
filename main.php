@@ -22,7 +22,7 @@ class communicator_server{
             $break = false;
             $clientSocket = communicator::acceptConnection($socket,5);
             if($clientSocket){
-                $startTime = time::millistamp();
+                $startTime = time();
                 $tempconid = date("Y-m-d H:i:s");
                 echo "$tempconid: Received connection\n";
 
@@ -51,7 +51,7 @@ class communicator_server{
 
                 if($data["type"] === "stop"){
                     $break = true;
-                    $response = "EXIT COMMUNICATOR SERVER";
+                    $response = true;
                 }
                 elseif($data["type"] === "command"){
                     cli::run($data['payload']);
@@ -62,20 +62,22 @@ class communicator_server{
                         $response = eval('return ' . $data['payload'] . ';');
                     }
                     catch(Throwable $throwable){
-                        mklog("warning","communicator_client: Something went wrong while trying to process: " . substr($data['payload'],0,strpos($data['payload'],"(")) . " (" . substr($throwable,0,strpos($throwable,"\n")) . ")");
+                        mklog(2, "Something went wrong while trying to process: " . substr($data['payload'],0,strpos($data['payload'],"(")) . " (" . substr($throwable,0,strpos($throwable,"\n")) . ")");
                     }
                 }
 
                 respond:
                 $response = base64_encode(json_encode($response));
-                communicator::send($clientSocket,$response);
+                if(!communicator::send($clientSocket,$response)){
+                    mklog(2, 'Failed to send response to ' . $connid);
+                }
 
-                $timeTaken = (time::millistamp() - $startTime)/1000;
+                $timeTaken = round((time() - $startTime), 3);
                 echo $connid . ": Closing connection (" . $timeTaken . "s)\n";
-                communicator::close($clientSocket);
+                @communicator::close($clientSocket);
 
-                if($timeTaken > 0.5){
-                    echo "Warning: " . $connid . ": Took longer than 0.5 seconds to execute: " . $data['payload'] . "\n";
+                if($timeTaken > 1){
+                    mklog(2, 'The payload ' . ($data["type"] === "function_string" ? substr($data['payload'],0,strpos($data['payload'],"(")) : $data['payload']) . ' took longer than 1 second to execute');
                 }
             }
             
