@@ -1,6 +1,6 @@
 <?php
 class communicator_server{
-    public static function socketServer(int $port=8080, string $ip="127.0.0.1"){
+    public static function socketServer(int $port=8080, string $ip="127.0.0.1", int $timeout=10){
         extensions::ensure('sockets');
 
         if(network::ping($ip, $port, 1)){
@@ -8,7 +8,7 @@ class communicator_server{
             return;
         }
 
-        $socket = communicator::createServer($ip, $port, 10, $socketError, $socketErrorString);
+        $socket = communicator::createServer($ip, $port, $timeout, $socketError, $socketErrorString);
         if(!$socket){
             mklog(2,'Unable to listen on ' . $ip . ':' . $port);
             return;
@@ -16,9 +16,11 @@ class communicator_server{
         echo "Listening on $ip:$port\n";
         exec('title Communicator Server ' . $port);
 
+        $repeatEvals = []; //Time delay between repeats is server timeout
+
         while(true){
             $break = false;
-            $clientSocket = communicator::acceptConnection($socket, 10);
+            $clientSocket = communicator::acceptConnection($socket, $timeout);
             if($clientSocket){
                 $startTime = time();
                 $tempconid = date("Y-m-d H:i:s");
@@ -80,6 +82,15 @@ class communicator_server{
             
             if($break){
                 break;
+            }
+
+            foreach($repeatEvals as $repeatEval){
+                try{
+                    eval($repeatEval);
+                }
+                catch(Throwable $throwable){
+                    mklog(2, "Something went wrong while trying to process a repeat eval");
+                }
             }
         }
         @communicator::close($socket);
