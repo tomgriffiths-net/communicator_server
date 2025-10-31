@@ -1,7 +1,5 @@
 # communicator_server
 This is a package for PHP-CLI.
 
-# Use
-To use this program in your own project:
-* Link back to original source (here or www.tomgriffiths.net).
-* Do not claim this code as your own.
+- **socketServer(int|false $port=false, string|false $ip=false, int|false $timeout=false):void**: Starts the server with specified overrides.
+- **getSettings():array**: Reads the communicator server settings.
