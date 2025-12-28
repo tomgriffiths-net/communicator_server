@@ -132,7 +132,13 @@ class communicator_server{
                 @communicator::close($clientSocket);
 
                 if(isset($timeTaken) && $timeTaken > 5){
-                    mklog(2, 'The request to run "' . ($data["type"] === "function_string" ? (substr($data['payload'],0,strpos($data['payload'],"(")) . '(...);') : $data['payload']) . '" took longer than 5 seconds to execute');
+                    if(is_array($data) && isset($data["type"]) && isset($data['payload']) && is_string($data['payload'])){
+                        mklog(2, 'The request to run "' . ($data["type"] === "function_string" ? (substr($data['payload'],0,strpos($data['payload'],"(")) . '(...);') : $data['payload']) . '" took longer than 5 seconds to execute');
+                    }
+                    else{
+                        mklog(2, 'The last request took longer than 5 seconds to execute');
+                    }
+                    
                 }
             }
 
