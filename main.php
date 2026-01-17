@@ -3,6 +3,8 @@ class communicator_server{
     private static $startups = [];
     private static $repeats = [];
     private static $shutdowns = [];
+
+    private static $exitServer = false;
     
     public static function init():void{
         $defaultSettings = [
@@ -62,7 +64,6 @@ class communicator_server{
         self::$startups = [];
 
         while(true){
-            $break = false;
             $clientSocket = communicator::acceptConnection($socket, $timeout);
             if($clientSocket){
                 $startTime = time();
@@ -70,57 +71,22 @@ class communicator_server{
 
                 echo "$tempconid: Received connection";
 
-                $data = communicator::receive($clientSocket);
-                if(!is_string($data) || empty($data)){
-                    echo " (ping)\n";
-                    goto close;
-                }
-                $data = base64_decode($data);
-                if(!is_string($data) || empty($data)){
-                    echo " (corrupt)\n";
-                    goto close;
-                }
-                $data = json_decode($data, true);
+                $data = communicator::receiveData($clientSocket, true);
                 if(!is_array($data) || empty($data)){
-                    echo " (corrupt values)\n";
+                    echo " (empty input)\n";
                     goto close;
                 }
-                $response = false;
+                
                 echo "\n";
 
-                $required = array("type","payload","name","password");
-                foreach($required as $require){
-                    if(!isset($data[$require])){
-                        $response = ucfirst($require) . " not present";
-                        echo "$tempconid: Missing data\n";
-                        goto close;
-                    }
-                }
-
-                $connid = $tempconid . " (" . $data['name'] . ")";
-
-                if(!communicator::verifyPassword($data['password'])){
-                    $response = false;
-                    echo "$connid: Incorrect passowrd submitted\n";
-                    goto respond;
-                }
+                $connid = $tempconid . " (" . communicator::getLastReceivedName() . ")";
 
                 echo "$connid: Processing data\n";
 
-                if($data["type"] === "stop"){
-                    $break = true;
-                    $response = true;
-                }
-                elseif($data["type"] === "command"){
-                    $response = cli::run($data['payload']);
-                }
-                elseif($data["type"] === "function_string"){
-                    self::tryToRunCode($data['payload'], $response);
-                }
+                $response = self::run($data);
 
                 respond:
-                $response = base64_encode(json_encode($response));
-                if(!communicator::send($clientSocket,$response)){
+                if(!communicator::sendData($clientSocket, $response, true)){
                     mklog(2, 'Failed to send response to ' . $connid);
                 }
 
@@ -138,16 +104,16 @@ class communicator_server{
                     else{
                         mklog(2, 'The last request took longer than 5 seconds to execute');
                     }
-                    
                 }
             }
 
             self::doThings(self::$repeats);
             
-            if($break){
+            if(self::$exitServer){
                 break;
             }
         }
+
         @communicator::close($socket);
 
         self::doThings(self::$shutdowns);
@@ -177,6 +143,59 @@ class communicator_server{
             'port' => $port,
             'timeout' => $timeout
         ];
+    }
+
+    public static function run(array $data):mixed{
+        $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
+        if(!isset($backtrace[1]['class']) || !in_array($backtrace[1]['class'], ["communicator_server", "communicator_client"])){
+            return [];
+        }
+
+        $response = ["success"=>false, "result"=>null];
+
+        if(!isset($data['type'])){
+            $response["error"] = "Type not set";
+            return $response;
+        }
+
+        if(!isset($data['version'])){
+            $data['version'] = 1;
+            echo "communicator_client outdated\n";
+        }
+
+        if(!isset($data['payload'])){
+            $response["error"] = "Payload not set";
+            return $response;
+        }
+
+        if($data["type"] === "stop"){
+            self::$exitServer = true;
+            $response["success"] = true;
+        }
+        elseif($data["type"] === "command"){
+            $response["success"] = cli::run($data['payload'], false);
+        }
+        elseif($data["type"] === "command_output" && $data['version'] > 1){
+            $response["success"] = true;
+            $response["result"] = cli::run($data['payload'], true);
+        }
+        elseif($data["type"] === "function_string"){
+            $response["success"] = self::tryToRunCode($data['payload'], $response["result"]);
+        }
+        else{
+            $response["error"] = "Unknown type";
+        }
+
+        if($data['version'] < 2){
+            if($response['result'] !== null){
+                $response = $response['result'];
+            }
+            else{
+                $response = $response['success'];
+            }
+        }
+
+        return $response;
     }
 
     private static function getThingsToDo():void{
@@ -251,25 +270,26 @@ class communicator_server{
         return $return;
     }
 
-    //This function should be present in any package that wants to use communicator to run automated tasks
-    /*public static function communicatorServerThingsToDo():array{
+    /*This function should be present in any package that wants to use communicator_server to run automated tasks
+    public static function communicatorServerThingsToDo():array{
         return [
             [
                 "type" => "startup",
-                "function" => 'communicator_server::test1()'
+                "function" => 'mypackage::test1()'
             ],
             [
                 "type" => "repeat",
                 "interval" => 10,
-                "function" => 'communicator_server::test2()'
+                "function" => 'mypackage::test2()'
             ],
             [
                 "type" => "shutdown",
-                "function" => 'communicator_server::test3()'
+                "function" => 'mypackage::test3()'
             ],
         ];
     }
-    //Example functions
+
+    //Example functions for mypackage
     public static function test1(){
         echo "IM STARTING\n";
     }
@@ -278,5 +298,6 @@ class communicator_server{
     }
     public static function test3(){
         echo "IM ENDING\n";
-    }*/
+    }
+    */
 }
