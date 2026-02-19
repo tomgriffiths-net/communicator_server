@@ -10,8 +10,10 @@ class communicator_server{
         $defaultSettings = [
             'autostart' => true,
             'port' => 8080,
-            'ip' => '127.0.0.1',
-            'timeout' => 5
+            'ip' => '0.0.0.0',
+            'timeout' => 5,
+            'filesDir' => 'communicator_server\\files',
+            'filesAreNameLocked' => true
         ];
 
         foreach($defaultSettings as $defaultName => $defaultValue){
@@ -79,11 +81,18 @@ class communicator_server{
                 
                 echo "\n";
 
-                $connid = $tempconid . " (" . communicator::getLastReceivedName() . ")";
+                $data['name'] = communicator::getLastReceivedName();
+
+                $connid = $tempconid . " (" . $data['name'] . ")";
 
                 echo "$connid: Processing data\n";
 
-                $response = self::run($data);
+                $response = self::run($data, $clientSocket);
+
+                if(empty($response)){
+                    mklog(2, "Empty result, aborting connection " . $connid);
+                    goto close;
+                }
 
                 respond:
                 if(!communicator::sendData($clientSocket, $response, true)){
@@ -145,7 +154,7 @@ class communicator_server{
         ];
     }
 
-    public static function run(array $data):mixed{
+    public static function run(array $data, $clientSocket=null):mixed{
         $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
         if(!isset($backtrace[1]['class']) || !in_array($backtrace[1]['class'], ["communicator_server", "communicator_client"])){
             return [];
@@ -182,9 +191,80 @@ class communicator_server{
         elseif($data["type"] === "function_string"){
             $response["success"] = self::tryToRunCode($data['payload'], $response["result"]);
         }
+        elseif(($data["type"] === "fileup" || $data["type"] === "filedown") && $data['version'] > 2){
+            if(!is_resource($clientSocket)){
+                $response["success"] = false;
+                $response["error"] = "Cannot do file transfers without socket information";
+                goto respond;
+            }
+
+            if(!is_array($data['payload'])|| !isset($data['payload']['name'])){
+                $response["success"] = false;
+                $response["error"] = "Missing file name";
+                goto respond;
+            }
+
+            if(!is_string($data['payload']['name']) || !preg_match('/^(?!\.)[a-zA-Z0-9.]+(?<!\.)$/', $data['payload']['name'])){
+                $response['success'] = false;
+                $response['error'] = "Invalid file name";
+                goto respond;
+            }
+
+            $data['payload']['name'] = strtolower($data['payload']['name']);
+
+            $path = settings::read('filesDir');
+            if(!is_string($path)){
+                mklog(2, "Failed to read filesDir setting");
+                $response['success'] = false;
+                $response['error'] = "Internal error";
+                goto respond;
+            }
+
+            if(settings::read('filesAreNameLocked')){
+                $path .= '\\' . $data['name'];
+            }
+
+            $path .= '\\' . $data['payload']['name'];
+
+            if($data["type"] === "fileup"){
+                if(is_file($path)){
+                    if(!isset($data['payload']['overwrite']) || !$data['payload']['overwrite']){
+                        $response['success'] = false;
+                        $response['error'] = "The file " . $data['payload']['name'] . " already exists.";
+                        goto respond;
+                    }
+                }
+
+                echo "Receiving file " . $data['payload']['name'] . " from " . $data['name'] . "\n";
+                if(!communicator::receiveFile($clientSocket, $path)){
+                    $response['success'] = false;
+                    $response['error'] = "Unable to receive file data.";
+                    goto respond;
+                }
+            }
+            else{//filedown
+                if(!is_file($path)){
+                    $response['success'] = false;
+                    $response['error'] = "The file " . $data['payload']['name'] . " does not exist.";
+                    goto respond;
+                }
+
+                echo "Sending file " . $data['payload']['name'] . " to " . $data['name'] . "\n";
+                if(!communicator::sendFromFile($clientSocket, $path)){
+                    $response['success'] = false;
+                    $response['error'] = "Unable to send file data.";
+                    goto respond;
+                }
+            }
+
+            $response['success'] = true;
+            $response['result'] = $path;
+        }
         else{
             $response["error"] = "Unknown type";
         }
+
+        respond:
 
         if($data['version'] < 2){
             if($response['result'] !== null){
