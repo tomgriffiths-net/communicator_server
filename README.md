@@ -16,9 +16,9 @@ This is a package for PHP-CLI, the communicator_client package should be used to
 
 # Things and Actions
 
-This function should be present in any package that wants to have custom actions in the communicator_server
-Items in args that are in --x format where x is the index of an element in the args array in the payload are replaced with the value.
-The defArgs are what can be substituted if the payload args does not contain a specific index, here index 1 which corresponds to arg 3, can be omitted or included whereas arg 1 which is payload args 0 must be provided as there is no defArg for 0.
+This function should be present in any package that wants to have custom actions in the communicator_server.
+- Items in args that are in --x format where x is the index of an element in the args array in the payload are replaced with the value.
+- The defArgs are what can be substituted if the payload args does not contain a specific index, here index 1 which corresponds to arg 3, can be omitted or included whereas arg 1 which is payload args 0 must be provided as there is no defArg for 0.
 
 ```php
 public static function communicatorServerActions():array{
@@ -35,10 +35,6 @@ public static function communicatorServerActions():array{
             ]
         ]
     ];
-}
-
-public static function test4($param1, $param2, $param3){
-    echo $param1 . $param2 . $param3;
 }
 ```
 
@@ -73,5 +69,8 @@ public static function test2(){
 }
 public static function test3(){
     echo "IM ENDING\n";
+}
+public static function test4($param1, $param2, $param3){
+    echo $param1 . $param2 . $param3;
 }
 ```
