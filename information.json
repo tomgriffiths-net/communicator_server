@@ -1,9 +1,9 @@
 {
     "id_name": "communicator_server",
     "name": "Communicator server (Dev)",
-    "version": 13,
+    "version": 14,
     "author": "tom",
-    "description": "Added extra check for bad data in execution time log",
+    "description": "",
     "dependencies": {
         "communicator": 8,
         "network": 2

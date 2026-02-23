@@ -4,6 +4,8 @@ class communicator_server{
     private static $repeats = [];
     private static $shutdowns = [];
 
+    private static $customActions = [];
+
     private static $exitServer = false;
     
     public static function init():void{
@@ -13,7 +15,9 @@ class communicator_server{
             'ip' => '0.0.0.0',
             'timeout' => 5,
             'filesDir' => 'communicator_server\\files',
-            'filesAreNameLocked' => true
+            'filesAreNameLocked' => true,
+            'disabledTypes' => [],
+            'stopWord' => ""
         ];
 
         foreach($defaultSettings as $defaultName => $defaultValue){
@@ -60,6 +64,7 @@ class communicator_server{
         echo cli_formatter::formatLine("Listening on $ip:$port", "green");
         exec('title Communicator Server ' . $port);
 
+        self::getCustomActions();
         self::getThingsToDo();
 
         self::doThings(self::$startups);
@@ -167,8 +172,22 @@ class communicator_server{
             return $response;
         }
 
+        $disabledTypes = settings::read('disabledTypes');
+        if(!is_array($disabledTypes)){
+            mklog(2, "Failed to read blocked types");
+            $response['error'] = "Internal server error";
+            return $response;
+        }
+        if(in_array($data['type'], $disabledTypes)){
+            $response['error'] = $data['type'] . " is disabled on this server";
+            return $response;
+        }
+
         if(!isset($data['version'])){
             $data['version'] = 1;
+        }
+
+        if($data['version'] < 4){
             echo "communicator_client outdated\n";
         }
 
@@ -178,17 +197,114 @@ class communicator_server{
         }
 
         if($data["type"] === "stop"){
+            $stopWord = settings::read('stopWord');
+            if(!is_string($stopWord)){
+                $response['error'] = "Internal server error";
+                return $response;
+            }
+
+            if(!empty($stopWord)){
+                if($data['payload'] !== $stopWord){
+                    $response['error'] = "Stop word does not match";
+                    return $response;
+                }
+            }
+
             self::$exitServer = true;
             $response["success"] = true;
+            return $response;
+        }
+        elseif($data["type"] === "custom" && $data['version'] > 3){
+            if(!is_array($data['payload']) || array_is_list($data['payload'])){
+                $response["error"] = "Invalid payload";
+                goto respond;
+            }
+
+            foreach(['package','action'] as $thing){
+                if(!isset($data['payload'][$thing]) || !is_string($data['payload'][$thing])){
+                    $response["error"] = "Invalid " . $thing;
+                    goto respond;
+                }
+            }
+
+            $actionPackage = $data['payload']['package'];
+            $actionName = $data['payload']['action'];
+
+            if(!isset(self::$customActions[$actionPackage])){
+                $response["error"] = "The package " . $actionPackage . " doesnt have any actions";
+                goto respond;
+            }
+
+            if(!isset(self::$customActions[$actionPackage][$actionName])){
+                $response["error"] = "The package " . $actionPackage . " doesnt have an action called " . $actionName;
+                goto respond;
+            }
+
+            $action = self::$customActions[$actionPackage][$actionName];
+
+            $function = $action['function'] . "(";
+
+            if(isset($action['args'])){
+                
+                if(!isset($data['payload']['args']) || !is_array($data['payload']['args']) || !array_is_list($data['payload']['args'])){
+                    $response['error'] = "That action reqires arguments";
+                    goto respond;
+                }
+                foreach($action['args'] as $arg){
+                    if(preg_match('/^--\d+$/', $arg)){
+                        $index = intval(substr($arg, 2));
+                        if(!isset($data['payload']['args'][$index])){
+                            if(isset($action['defArgs']) && isset($action['defArgs'][$index])){
+                                $data['payload']['args'][$index] = $action['defArgs'][$index];
+                            }
+                            else{
+                                $response['error'] = "The action " . $actionName . " requires argument " . $index . " (0 indexed)";
+                                goto respond;
+                            }
+                        }
+                        $value = $data['payload']['args'][$index];
+                    }
+                    else{
+                        $value = $arg;
+                    }
+
+                    $function .= "unserialize(base64_decode('" . base64_encode(serialize($value)) . "')),";
+                }
+                if(!empty($action['args'])){
+                    $function = substr($function, 0, -1);
+                }
+            }
+
+            $function .= ")";
+
+            $response["success"] = self::tryToRunCode($function, $response["result"]);
+            if(!$response["success"]){
+                $response["error"] = "Failed to run function";
+            }
         }
         elseif($data["type"] === "command"){
+            if(!is_string($data['payload'])){
+                $response['error'] = "payload is not a string";
+                goto respond;
+            }
+
             $response["success"] = cli::run($data['payload'], false);
         }
         elseif($data["type"] === "command_output" && $data['version'] > 1){
+            if(!is_string($data['payload'])){
+                $response['error'] = "payload is not a string";
+                goto respond;
+            }
+
             $response["success"] = true;
             $response["result"] = cli::run($data['payload'], true);
         }
         elseif($data["type"] === "function_string"){
+            if(!is_string($data['payload'])){
+                $response['error'] = "payload is not a string";
+                goto respond;
+            }
+
             $response["success"] = self::tryToRunCode($data['payload'], $response["result"]);
         }
         elseif(($data["type"] === "fileup" || $data["type"] === "filedown") && $data['version'] > 2){
@@ -278,6 +394,43 @@ class communicator_server{
         return $response;
     }
 
+    private static function getCustomActions():void{
+        $packages = pkgmgr::getLoadedPackages();
+        foreach($packages as $packageId => $packageVersion){
+            if(method_exists($packageId, "communicatorServerActions")){
+                $actions = $packageId::communicatorServerActions();
+                if(!is_array($actions)){
+                    continue;    
+                }
+
+                foreach($actions as $actionName => $action){
+                    if(!is_string($actionName) || empty($actionName) || !is_array($action)){
+                        continue;
+                    }
+
+                    if(!isset($action['function']) || !is_string($action['function'])){
+                        continue;
+                    }
+
+                    if(isset($action['args'])){
+                        if(!is_array($action['args']) || !array_is_list($action['args'])){
+                            continue;
+                        }
+
+                        if(isset($action['defArgs']) && !is_array($action['defArgs'])){
+                            continue;
+                        }
+                    }
+
+                    self::$customActions[$packageId][$actionName] = $action;
+                }
+
+                if(isset(self::$customActions[$packageId])){
+                    mklog(1, $packageId . " registered " . count(self::$customActions[$packageId]) . " custom actions");
+                }
+            }
+        }
+    }
     private static function getThingsToDo():void{
         $packages = pkgmgr::getLoadedPackages();
         foreach($packages as $packageId => $packageVersion){
@@ -349,35 +502,4 @@ class communicator_server{
 
         return $return;
     }
-
-    /*This function should be present in any package that wants to use communicator_server to run automated tasks
-    public static function communicatorServerThingsToDo():array{
-        return [
-            [
-                "type" => "startup",
-                "function" => 'mypackage::test1()'
-            ],
-            [
-                "type" => "repeat",
-                "interval" => 10,
-                "function" => 'mypackage::test2()'
-            ],
-            [
-                "type" => "shutdown",
-                "function" => 'mypackage::test3()'
-            ],
-        ];
-    }
-
-    //Example functions for mypackage
-    public static function test1(){
-        echo "IM STARTING\n";
-    }
-    public static function test2(){
-        echo "HI THERE\n";
-    }
-    public static function test3(){
-        echo "IM ENDING\n";
-    }
-    */
 }
