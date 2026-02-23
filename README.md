@@ -16,55 +16,62 @@ This is a package for PHP-CLI, the communicator_client package should be used to
 
 # Things and Actions
 
-    //This function should be present in any package that wants to have custom actions in the communicator_server
-    //Items in args that are in --x format where x is the index of an element in the args array in the payload are replaced with the value.
-    //The defArgs are what can be substituted if the payload args does not contain a specific index, here index 1 which corresponds to arg 3, can be omitted or included whereas arg 1 which is payload args 0 must be provided as there is no defArg for 0.
-    public static function communicatorServerActions():array{
-        return [
-            "custom-action-name" => [
-                "function" => "mypackage::test4",
-                "args" => [
-                    "--0",
-                    "fixed value",
-                    "--1"
-                ],
-                "defArgs" => [
-                    1 => null
-                ]
+This function should be present in any package that wants to have custom actions in the communicator_server
+Items in args that are in --x format where x is the index of an element in the args array in the payload are replaced with the value.
+The defArgs are what can be substituted if the payload args does not contain a specific index, here index 1 which corresponds to arg 3, can be omitted or included whereas arg 1 which is payload args 0 must be provided as there is no defArg for 0.
+
+```php
+public static function communicatorServerActions():array{
+    return [
+        "custom-action-name" => [
+            "function" => "mypackage::test4",
+            "args" => [
+                "--0",
+                "fixed value",
+                "--1"
+            ],
+            "defArgs" => [
+                1 => null
             ]
-        ];
-    }
+        ]
+    ];
+}
 
-    public static function test4($param1, $param2, $param3){
-        echo $param1 . $param2 . $param3;
-    }
+public static function test4($param1, $param2, $param3){
+    echo $param1 . $param2 . $param3;
+}
+```
 
-    //This function should be present in any package that wants to use communicator_server to run automated tasks
-    public static function communicatorServerThingsToDo():array{
-        return [
-            [
-                "type" => "startup",
-                "function" => 'mypackage::test1()'
-            ],
-            [
-                "type" => "repeat",
-                "interval" => 10,
-                "function" => 'mypackage::test2()'
-            ],
-            [
-                "type" => "shutdown",
-                "function" => 'mypackage::test3()'
-            ],
-        ];
-    }
+This function should be present in any package that wants to use communicator_server to run automated tasks
+```php
+public static function communicatorServerThingsToDo():array{
+    return [
+        [
+            "type" => "startup",
+            "function" => 'mypackage::test1()'
+        ],
+        [
+            "type" => "repeat",
+            "interval" => 10,
+            "function" => 'mypackage::test2()'
+        ],
+        [
+            "type" => "shutdown",
+            "function" => 'mypackage::test3()'
+        ],
+    ];
+}
+```
 
-    //Example functions for mypackage
-    public static function test1(){
-        echo "IM STARTING\n";
-    }
-    public static function test2(){
-        echo "HI THERE\n";
-    }
-    public static function test3(){
-        echo "IM ENDING\n";
-    }
+Example functions for mypackage
+```php
+public static function test1(){
+    echo "IM STARTING\n";
+}
+public static function test2(){
+    echo "HI THERE\n";
+}
+public static function test3(){
+    echo "IM ENDING\n";
+}
+```
