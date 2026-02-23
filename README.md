@@ -38,7 +38,7 @@ public static function communicatorServerActions():array{
 }
 ```
 
-This function should be present in any package that wants to use communicator_server to run automated tasks
+This function should be present in any package that wants to use communicator_server to run automated tasks.
 ```php
 public static function communicatorServerThingsToDo():array{
     return [
@@ -59,7 +59,7 @@ public static function communicatorServerThingsToDo():array{
 }
 ```
 
-Example functions for mypackage
+Example functions for mypackage.
 ```php
 public static function test1(){
     echo "IM STARTING\n";
