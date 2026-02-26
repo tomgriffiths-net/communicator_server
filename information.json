@@ -1,7 +1,7 @@
 {
     "id_name": "communicator_server",
     "name": "Communicator server (Dev)",
-    "version": 14,
+    "version": 15,
     "author": "tom",
     "description": "",
     "dependencies": {

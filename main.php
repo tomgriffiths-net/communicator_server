@@ -254,7 +254,7 @@ class communicator_server{
                     if(preg_match('/^--\d+$/', $arg)){
                         $index = intval(substr($arg, 2));
                         if(!isset($data['payload']['args'][$index])){
-                            if(isset($action['defArgs']) && isset($action['defArgs'][$index])){
+                            if(isset($action['defArgs']) && array_key_exists($index, $action['defArgs'])){
                                 $data['payload']['args'][$index] = $action['defArgs'][$index];
                             }
                             else{
