@@ -3,10 +3,9 @@ class communicator_server{
     private static $startups = [];
     private static $repeats = [];
     private static $shutdowns = [];
-
     private static $customActions = [];
-
     private static $exitServer = false;
+    private static $serverSocket = null;
     
     public static function init():void{
         $defaultSettings = [
@@ -15,7 +14,8 @@ class communicator_server{
             'ip' => '0.0.0.0',
             'timeout' => 5,
             'filesDir' => 'communicator_server\\files',
-            'filesAreNameLocked' => true,
+            'filesAreNameLocked' => false,
+            'allowAbsoluteFiles' => false,
             'disabledTypes' => [],
             'stopWord' => ""
         ];
@@ -36,6 +36,13 @@ class communicator_server{
                 cmd::newWindow('php\php cli.php command "timetest communicator_server::socketServer();" no-loop true');
             }
         }
+
+        if(function_exists('sapi_windows_set_ctrl_handler')){
+            sapi_windows_set_ctrl_handler(function(){
+                communicator_server::shutdownServer();
+                exit;
+            });
+        }
     }
 
     public static function socketServer(int|false $port=false, string|false $ip=false, int|false $timeout=false):void{
@@ -54,8 +61,8 @@ class communicator_server{
             return;
         }
 
-        $socket = communicator::createServer($ip, $port, false, $socketError, $socketErrorString);
-        if(!$socket){
+        self::$serverSocket = communicator::createServer($ip, $port, false, $socketError, $socketErrorString);
+        if(!self::$serverSocket){
             mklog(2,'Unable to listen on ' . $ip . ':' . $port);
             return;
         }
@@ -71,7 +78,7 @@ class communicator_server{
         self::$startups = [];
 
         while(true){
-            $clientSocket = communicator::acceptConnection($socket, $timeout);
+            $clientSocket = communicator::acceptConnection(self::$serverSocket, $timeout);
             if($clientSocket){
                 $startTime = time();
                 $tempconid = date("Y-m-d H:i:s");
@@ -128,13 +135,7 @@ class communicator_server{
             }
         }
 
-        @communicator::close($socket);
-
-        self::doThings(self::$shutdowns);
-        self::$repeats = [];
-        self::$shutdowns = [];
-
-        mklog(1, 'Communicator server stopped');
+        self::shutdownServer();
     }
     public static function getSettings():array{
         $ip = settings::read('ip');
@@ -314,33 +315,49 @@ class communicator_server{
                 goto respond;
             }
 
-            if(!is_array($data['payload'])|| !isset($data['payload']['name'])){
+            if(!is_array($data['payload']) || !isset($data['payload']['name']) || !is_string($data['payload']['name'])){
                 $response["success"] = false;
                 $response["error"] = "Missing file name";
                 goto respond;
             }
 
-            if(!is_string($data['payload']['name']) || !preg_match('/^(?!\.)[a-zA-Z0-9.]+(?<!\.)$/', $data['payload']['name'])){
-                $response['success'] = false;
-                $response['error'] = "Invalid file name";
-                goto respond;
-            }
-
             $data['payload']['name'] = strtolower($data['payload']['name']);
 
-            $path = settings::read('filesDir');
-            if(!is_string($path)){
-                mklog(2, "Failed to read filesDir setting");
-                $response['success'] = false;
-                $response['error'] = "Internal error";
-                goto respond;
-            }
+            if(substr($data['payload']['name'], 1, 1) === ":"){
+                if(!settings::read("allowAbsoluteFiles")){
+                    $response["success"] = false;
+                    $response["error"] = "Absolute file paths are not allowed";
+                    goto respond;
+                }
 
-            if(settings::read('filesAreNameLocked')){
-                $path .= '\\' . $data['name'];
+                if(!preg_match('/^(?:[a-zA-Z]:[\\\\\/]|[\\\\\/])[a-zA-Z0-9_.\\\\\/-]*$/', $data['payload']['name'])){
+                    $response["success"] = false;
+                    $response["error"] = "Invalid file name";
+                    goto respond;
+                }
+                $path = $data['payload']['name'];
             }
+            else{
+                if(!preg_match('/^(?!\.)[\w.\-]+(?<!\.)$/', $data['payload']['name']) || str_contains($data['payload']['name'], "..")){
+                    $response['success'] = false;
+                    $response['error'] = "Invalid file name";
+                    goto respond;
+                }
 
-            $path .= '\\' . $data['payload']['name'];
+                $path = settings::read('filesDir');
+                if(!is_string($path)){
+                    mklog(2, "Failed to read filesDir setting");
+                    $response['success'] = false;
+                    $response['error'] = "Internal error";
+                    goto respond;
+                }
+
+                if(settings::read('filesAreNameLocked')){
+                    $path .= '\\' . $data['name'];
+                }
+
+                $path .= '\\' . $data['payload']['name'];
+            }
 
             if($data["type"] === "fileup"){
                 if(is_file($path)){
@@ -351,7 +368,7 @@ class communicator_server{
                     }
                 }
 
-                echo "Receiving file " . $data['payload']['name'] . " from " . $data['name'] . "\n";
+                mklog(1, "Receiving file " . $data['payload']['name'] . " from " . $data['name']);
                 if(!communicator::receiveFile($clientSocket, $path)){
                     $response['success'] = false;
                     $response['error'] = "Unable to receive file data.";
@@ -365,7 +382,7 @@ class communicator_server{
                     goto respond;
                 }
 
-                echo "Sending file " . $data['payload']['name'] . " to " . $data['name'] . "\n";
+                mklog(1, "Sending file " . $data['payload']['name'] . " to " . $data['name']);
                 if(!communicator::sendFromFile($clientSocket, $path)){
                     $response['success'] = false;
                     $response['error'] = "Unable to send file data.";
@@ -392,6 +409,21 @@ class communicator_server{
         }
 
         return $response;
+    }
+    public static function shutdownServer():void{
+        if(!self::$serverSocket){
+            return;
+        }
+
+        @communicator::close(self::$serverSocket);
+
+        self::doThings(self::$shutdowns);
+        self::$repeats = [];
+        self::$shutdowns = [];
+
+        mklog(1, 'Communicator server stopped');
+
+        sleep(5);
     }
 
     private static function getCustomActions():void{
