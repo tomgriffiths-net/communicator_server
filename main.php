@@ -83,21 +83,29 @@ class communicator_server{
                 $startTime = time();
                 $tempconid = date("Y-m-d H:i:s");
 
-                echo "$tempconid: Received connection";
+                if(verboseLogging()){
+                    echo "$tempconid: Received connection";
+                }
 
                 $data = communicator::receiveData($clientSocket, true);
                 if(!is_array($data) || empty($data)){
-                    echo " (empty input)\n";
+                    if(verboseLogging()){
+                        echo " (empty input)\n";
+                    }
                     goto close;
                 }
                 
-                echo "\n";
-
+                if(verboseLogging()){
+                    echo "\n";
+                }
+                
                 $data['name'] = communicator::getLastReceivedName();
 
                 $connid = $tempconid . " (" . $data['name'] . ")";
 
-                echo "$connid: Processing data\n";
+                if(verboseLogging()){
+                    echo "$connid: Processing data\n";
+                }
 
                 $response = self::run($data, $clientSocket);
 
@@ -112,8 +120,11 @@ class communicator_server{
                 }
 
                 $timeTaken = round((time() - $startTime), 3);
-                echo $connid . ": Closing connection (" . $timeTaken . "s)\n";
-
+                
+                if(verboseLogging()){
+                    echo $connid . ": Closing connection (" . $timeTaken . "s)\n";
+                }
+                
                 close:
 
                 @communicator::close($clientSocket);
@@ -254,7 +265,7 @@ class communicator_server{
                 foreach($action['args'] as $arg){
                     if(preg_match('/^--\d+$/', $arg)){
                         $index = intval(substr($arg, 2));
-                        if(!isset($data['payload']['args'][$index])){
+                        if(!array_key_exists($index, $data['payload']['args'])){
                             if(isset($action['defArgs']) && array_key_exists($index, $action['defArgs'])){
                                 $data['payload']['args'][$index] = $action['defArgs'][$index];
                             }
